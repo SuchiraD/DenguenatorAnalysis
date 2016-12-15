@@ -7,12 +7,12 @@ public class App {
 
     public static void main( String[] args ) throws InterruptedException {
         int startWeek = 1,
-                maxWeeks = 51,
+                maxWeeks = 103,
                 maxError = 100000,
                 maxInitIter = 10000,
                 maxAIter = 100000;
         String mohName = "MC - Colombo";
-        mohName = "MCColombo";
+//        mohName = "MCColombo";
 
 
         //String threadName, String mohName, int maxWeeks, int maxError, int maxInitIter, int maxAIter

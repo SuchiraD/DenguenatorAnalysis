@@ -99,7 +99,7 @@ public class SEIRAnalysis extends Thread {
 
     private void getReportedDengueCases(String mohName) {
         ReadDengueCases dengueCasesReader = new ReadDengueCases("/media/suchira/0A9E051F0A9E051F/CSE 2012/Semester 07-08/FYP/Denguenator/Dengunator 2.0/Data/Dengue/"
-                + "dengueCases2012.csv");
+                + "dengueCases2013_2014.csv");
         dengueCasesList = dengueCasesReader.getDengueCases(mohName);
         adjustDengueCases(dengueCasesList);
     }
@@ -713,11 +713,11 @@ public class SEIRAnalysis extends Thread {
         int refactoredWeek = week - START_WEEK + 1;
 
         eh[refactoredWeek] = (int) (dengueCases.get(week) / (gammah));
-        a[refactoredWeek] = (eh[refactoredWeek] - (1-gammah)*eh[refactoredWeek-1])/sh[refactoredWeek-1];
-        if(a[refactoredWeek] < 0 || a[refactoredWeek] > 2) {
+        a[refactoredWeek-1] = (eh[refactoredWeek] - (1-gammah)*eh[refactoredWeek-1])/sh[refactoredWeek-1];
+        if(a[refactoredWeek-1] < 0 || a[refactoredWeek-1] > 2) {
             throw new Exception("Wrong \"a\"");
         }
-        sh[refactoredWeek] = (int) ((1-a[refactoredWeek]) * sh[refactoredWeek-1]);
+        sh[refactoredWeek] = (int) ((1-a[refactoredWeek-1]) * sh[refactoredWeek-1]);
         ih[refactoredWeek] = (int) ((1-sigmah)*ih[refactoredWeek-1] + gammah*eh[refactoredWeek-1]);
         if(ih[refactoredWeek] < 0) {
             throw new Exception("Wrong \"Ih\"");
