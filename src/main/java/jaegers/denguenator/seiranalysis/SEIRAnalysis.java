@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -22,6 +23,7 @@ import static java.util.concurrent.ThreadLocalRandom.current;
  * Created by suchira on 11/8/16.
  */
 public class SEIRAnalysis extends Thread {
+    private String year = "2012";
     private int tCount = 0;
     private final int MAX_ITERATIONS = 1000;
     private final int MAX_REPEAT = 5;
@@ -69,10 +71,13 @@ public class SEIRAnalysis extends Thread {
 
     private Thread thread;
     private String threadName;
+    private Date date;
 
     private List<Integer> dengueCasesList;
 
-    public SEIRAnalysis(String threadName, String mohName, int startWeek, int maxWeeks, int maxError, int maxInitIter, int maxAIter) {
+    private WriteSEIRAnalysisResults writer;
+
+    public SEIRAnalysis(String threadName, String mohName, int startWeek, int maxWeeks, int maxError, int maxInitIter, int maxAIter, Date date, String year) {
         this.mohName = mohName;
         this.threadName = threadName;
         this.mohName = mohName;
@@ -81,6 +86,8 @@ public class SEIRAnalysis extends Thread {
         this.MAX_INIT_ITERATIONS = maxInitIter;
         this.MAX_A_ITERATIONS = maxAIter;
         this.MAX_ERROR = maxError;
+        this.date = date;
+        this.year = year;
         getReportedDengueCases(mohName);
     }
 
@@ -99,7 +106,7 @@ public class SEIRAnalysis extends Thread {
 
     private void getReportedDengueCases(String mohName) {
         ReadDengueCases dengueCasesReader = new ReadDengueCases("/media/suchira/0A9E051F0A9E051F/CSE 2012/Semester 07-08/FYP/Denguenator/Dengunator 2.0/Data/Dengue/"
-                + "dengueCases2013_2014.csv");
+                + "dengueCases" + year + ".csv");
         dengueCasesList = dengueCasesReader.getDengueCases(mohName);
         adjustDengueCases(dengueCasesList);
     }
@@ -171,13 +178,13 @@ public class SEIRAnalysis extends Thread {
 //            backPropagationMethod();
 //            leastSquareMethodWeekly();
             weeklyMethod();
-        }
-
-        if (bestSh[0] != -1) {
-            try {
-                writeResults(daily);
-            } catch (IOException e) {
-                e.printStackTrace();
+            if (bestSh[0] != -1) {
+                try {
+                    writeResults(daily);
+                    writeProperties();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             }
         }
     }
@@ -492,13 +499,20 @@ public class SEIRAnalysis extends Thread {
 
 
     private synchronized void writeResults(boolean daily) throws IOException {
-        WriteSEIRAnalysisResults writer = new WriteSEIRAnalysisResults(threadName);
+        writer = new WriteSEIRAnalysisResults(date.toString(), year, true);
         if (daily)
             writer.writeCSV(IntStream.rangeClosed((START_WEEK-1)*7, MAX_WEEKS*7).toArray(), bestSh, bestEh, bestIh, bestRh, bestAs);
         else {
             writer.writeCSV(IntStream.rangeClosed((START_WEEK-1), MAX_WEEKS).toArray(), bestSh, bestEh, bestIh, bestRh, bestAs);
         }
         writer.close();
+    }
+
+    private synchronized void writeProperties() throws IOException {
+        if(writer == null) {
+            writer = new WriteSEIRAnalysisResults(date.toString(), threadName, false);
+            writer.close();
+        }
         List<String> lines = Arrays.asList(
                 "bestReportingRate="+reportingRate,
                 "aUpperValue="+aUpperValue,

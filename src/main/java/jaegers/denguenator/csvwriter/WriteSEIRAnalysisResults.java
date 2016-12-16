@@ -8,6 +8,9 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
 
 /**
  * Created by suchira on 11/9/16.
@@ -20,13 +23,25 @@ public class WriteSEIRAnalysisResults {
     private String fileName;
     private CSVWriter csvWriter;
     private static String folderPath;
+    private static boolean lock = false;
+    private static boolean isDirectoryExists = false;
 
-    public WriteSEIRAnalysisResults(String fileNameSuffix) throws IOException {
-        Date date = new Date();
-        this.folderPath = filePath+date.toString() + "/";
-        new File(folderPath).mkdir();
-        this.fileName = folderPath +fileNamePrefix+fileNameSuffix + /*date.toString() +*/ ".csv";
-        csvWriter = new CSVWriter(new FileWriter(fileName));
+    public WriteSEIRAnalysisResults(String folderName, String fileNameSuffix, boolean append) throws IOException {
+        this.folderPath = filePath+ folderName + "/";
+        File directory = new File(folderPath);
+        isDirectoryExists = directory.exists();
+        if(!isDirectoryExists) {
+            directory.mkdir();
+
+        }
+        this.fileName = folderPath +fileNamePrefix+fileNameSuffix + ".csv";
+        File file = new File(fileName);
+        if(!file.exists()) {
+            csvWriter = new CSVWriter(new FileWriter(fileName, append));
+            csvWriter.writeNext(header);
+            csvWriter.flush();
+        }
+        csvWriter = new CSVWriter(new FileWriter(fileName, append));
     }
 
     private List<String[]> prepareEntries(int[] days, int[] sh, int[] eh, int[] ih, int[] rh, double[] a) {
@@ -45,9 +60,8 @@ public class WriteSEIRAnalysisResults {
         return entries;
     }
 
-    public void writeCSV(int[] days, int[] sh, int[] eh, int[] ih, int[] rh, double[] a) {
+    public synchronized void writeCSV(int[] days, int[] sh, int[] eh, int[] ih, int[] rh, double[] a) {
         List<String[]> entries = prepareEntries(days, sh, eh, ih, rh, a);
-        entries.add(0, header);
         csvWriter.writeAll(entries);
     }
 
@@ -86,4 +100,5 @@ public class WriteSEIRAnalysisResults {
     public void setFolderPath(String folderPath) {
         this.folderPath = folderPath;
     }
+
 }
