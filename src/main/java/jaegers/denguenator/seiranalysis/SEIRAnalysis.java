@@ -1,6 +1,7 @@
 package jaegers.denguenator.seiranalysis;
 
 import jaegers.denguenator.csvreader.ReadDengueCases;
+import jaegers.denguenator.csvreader.ReadPopulations;
 import jaegers.denguenator.csvwriter.WriteSEIRAnalysisResults;
 
 import java.io.IOException;
@@ -40,14 +41,14 @@ public class SEIRAnalysis extends Thread {
 
     private List<Integer> dengueCases = new ArrayList(0);
 
-    private int N = 567272; //population
-    private double reportingRate = 0.02;
+    private int N = 567272; //population for colombo
+    private double reportingRate = 0.04;
     private int ShUpperRange = (int)(0.8*N);
     private int ShLowerRange = (int)(0.2*N);
-    private int EhUpperRange = 90000;
-    private int EhLowerRange = 10;
-    private int IhUpperRange = 90000;
-    private int IhLowerRange = 10;
+    private int EhUpperRange = 9000;
+    private int EhLowerRange = 0;
+    private int IhUpperRange = 9000;
+    private int IhLowerRange = 0;
 
     private double aUpperValue = 0.8;
     private double aLowerValue = 0.0;
@@ -72,6 +73,7 @@ public class SEIRAnalysis extends Thread {
     private Thread thread;
     private String threadName;
     private Date date;
+    private String folderName;
 
     private List<Integer> dengueCasesList;
 
@@ -88,7 +90,26 @@ public class SEIRAnalysis extends Thread {
         this.MAX_ERROR = maxError;
         this.date = date;
         this.year = year;
+        this.folderName = mohName + "-" + date.toString();
         getReportedDengueCases(mohName);
+        getPopulation(mohName);
+    }
+
+    private void getPopulation(String mohName) {
+        ReadPopulations readPopulation = new ReadPopulations("/media/suchira/0A9E051F0A9E051F/CSE 2012/Semester 07-08/FYP/Denguenator/Dengunator 2.0/Data/"
+                + "Population/Estimated and Actual Populations in MOH's Srilanka2.csv");
+        try {
+            this.N = readPopulation.getActualPopulation(mohName);
+            readPopulation.close();
+            ShUpperRange = (int)(0.8*N);
+            ShLowerRange = (int)(0.2*N);
+            /*EhUpperRange = 900;
+            EhLowerRange = 0;
+            IhUpperRange = 900;
+            IhLowerRange = 0;*/
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     public void calculateDengueDynamics(double tempA, int day) {
@@ -108,13 +129,18 @@ public class SEIRAnalysis extends Thread {
         ReadDengueCases dengueCasesReader = new ReadDengueCases("/media/suchira/0A9E051F0A9E051F/CSE 2012/Semester 07-08/FYP/Denguenator/Dengunator 2.0/Data/Dengue/"
                 + "dengueCases" + year + ".csv");
         dengueCasesList = dengueCasesReader.getDengueCases(mohName);
+        dengueCasesList.remove(dengueCasesList.size()-1); // Removing the Total of dengue cases
         adjustDengueCases(dengueCasesList);
+        try {
+            dengueCasesReader.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     private void adjustDengueCases(List<Integer> dengueCasesList) {
         dengueCases.addAll(dengueCasesList.stream().map(dengueCase -> (int) (dengueCase / reportingRate))
                 .collect(Collectors.toList()));
-        dengueCases.remove(dengueCases.size()-1);
     }
 
     //This should be call after initializing MAX_WEEKS
@@ -180,7 +206,7 @@ public class SEIRAnalysis extends Thread {
             weeklyMethod();
             if (bestSh[0] != -1) {
                 try {
-                    writeResults(daily);
+                    writeResults(daily, ("TEST").equals(this.threadName));
                     writeProperties();
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -498,8 +524,8 @@ public class SEIRAnalysis extends Thread {
     }
 
 
-    private synchronized void writeResults(boolean daily) throws IOException {
-        writer = new WriteSEIRAnalysisResults(date.toString(), year, true);
+    private synchronized void writeResults(boolean daily, boolean isTestFile) throws IOException {
+        writer = new WriteSEIRAnalysisResults(folderName, isTestFile? year+"TEST":year, true, year, mohName, N);
         if (daily)
             writer.writeCSV(IntStream.rangeClosed((START_WEEK-1)*7, MAX_WEEKS*7).toArray(), bestSh, bestEh, bestIh, bestRh, bestAs);
         else {
@@ -510,7 +536,7 @@ public class SEIRAnalysis extends Thread {
 
     private synchronized void writeProperties() throws IOException {
         if(writer == null) {
-            writer = new WriteSEIRAnalysisResults(date.toString(), threadName, false);
+            writer = new WriteSEIRAnalysisResults(folderName, threadName, false, year, mohName, N);
             writer.close();
         }
         List<String> lines = Arrays.asList(
@@ -625,7 +651,8 @@ public class SEIRAnalysis extends Thread {
     }
     @Override public synchronized void start() {
         tCount++;
-        System.out.println("Starting " + threadName + " thread count = " + tCount);
+        System.out.println("Starting " + threadName + " for MOH area: " + mohName);
+        System.out.println("Population is: " + this.N);
         if(thread == null) {
             thread = new Thread(this, threadName);
             thread.start();
@@ -684,9 +711,11 @@ public class SEIRAnalysis extends Thread {
         int count = 0;
         while (!finished) {
             count++;
-            if(count % 1000000 == 0)
+            if(count % 100000 == 0) {
                 System.out.println("Iteration " + count);
-            while ((sh[0] + eh[0] + ih[0] + rh[0]) != N) {
+                break;
+            }
+            while ((sh[0] + eh[0] + ih[0] + rh[0]) != N || sh[0]<0 || eh[0]<0 || ih[0]<0 || rh[0]<0) {
                 sh[0] = current().nextInt(ShLowerRange, ShUpperRange + 1);
                 ih[0] = current().nextInt(IhLowerRange, IhUpperRange + 1);
                 rh[0] = N - (sh[0] + eh[0] + ih[0]);
@@ -707,7 +736,13 @@ public class SEIRAnalysis extends Thread {
                 rh[0] = 0;
                 continue;
             }
+
+            System.out.println("###############################  Number of iterations: " + count);
             finished = true;
+        }
+
+        if(!finished) {
+            return;
         }
 
 
@@ -733,7 +768,7 @@ public class SEIRAnalysis extends Thread {
         }
         sh[refactoredWeek] = (int) ((1-a[refactoredWeek-1]) * sh[refactoredWeek-1]);
         ih[refactoredWeek] = (int) ((1-sigmah)*ih[refactoredWeek-1] + gammah*eh[refactoredWeek-1]);
-        if(ih[refactoredWeek] < 0) {
+        if(ih[refactoredWeek] < 0 || ih[refactoredWeek] > IhUpperRange) {
             throw new Exception("Wrong \"Ih\"");
         }
         rh[refactoredWeek] = (int) (rh[refactoredWeek-1] + sigmah*ih[refactoredWeek-1]);

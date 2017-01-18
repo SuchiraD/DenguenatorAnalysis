@@ -13,8 +13,12 @@ public class App {
                 maxAIter = 100000;
         String mohName = "MC - Colombo"; // for 2013 and 2014
         String mohName2012 = "MCColombo"; // for 2012
+        mohName2012 = mohName;
+
+        String[] mohs = {/*"Dehiwala", */"MC - Colombo"/*, "Kaduwela", "Moratuwa", "Maharagama", "Kollonnawa", "Nugegoda", "Wattala", "Kelaniya", "Boralesgamuwa", "Homagama", "Piliyandala", "Panadura", "MC-Galle"*/};
 
         String year = "2014";
+        maxInitIter = 1;
 
         Date date = new Date();
 
@@ -56,20 +60,32 @@ public class App {
         }
 
         System.out.println("In MAIN thread ----------------" + analysis1.getState());*/
-        SEIRAnalysis analysis1= new SEIRAnalysis("thread1", mohName2012, startWeek, maxWeeks, maxError, maxInitIter, maxAIter, date, "2012");
-        SEIRAnalysis analysis2 = new SEIRAnalysis("thread2", mohName, startWeek, maxWeeks, maxError, maxInitIter, maxAIter, date, "2013");
 
-        for(int i = 1; i <= 1000 && ("NEW").equals(analysis1.getState().toString()); i++) {
-            analysis1 = new SEIRAnalysis("thread1", mohName2012, startWeek, maxWeeks, maxError, maxInitIter, maxAIter, date, "2012");
-            analysis2 = new SEIRAnalysis("thread2", mohName, startWeek, maxWeeks, maxError, maxInitIter, maxAIter, date, "2013");
-            analysis1.start();
-            analysis2.start();
-            analysis1.join();
-            analysis2.join();
+        for (int mohIndex = 0; mohIndex < mohs.length; mohIndex++) {
+            mohName = mohs[mohIndex];
+            mohName2012 = mohName;
+
+            SEIRAnalysis analysis1= new SEIRAnalysis("thread1", mohName2012, startWeek, maxWeeks, maxError, maxInitIter, maxAIter, date, "2012");
+            SEIRAnalysis analysis2;
+            SEIRAnalysis analysis3;
+            for(int i = 1; i <= maxInitIter && ("NEW").equals(analysis1.getState().toString()); i++) {
+                analysis1 = new SEIRAnalysis("thread1", mohName2012, startWeek, maxWeeks, maxError, maxInitIter, maxAIter, date, "2012");
+                analysis2 = new SEIRAnalysis("thread2", mohName, startWeek, maxWeeks, maxError, maxInitIter, maxAIter, date, "2013");
+//                analysis3 = new SEIRAnalysis("thread3", mohName, 1, 27, maxError, maxInitIter, maxAIter, date, "2014");
+                analysis1.start();
+                analysis2.start();
+//                analysis3.start();
+                analysis1.join();
+                analysis2.join();
+//                analysis3.join();
+            }
+
+            //        for (int i = 1; i<5; i++) {
+            SEIRAnalysis test = new SEIRAnalysis("TEST", mohName, 1, 51, maxError, maxInitIter, maxAIter, date, "2014");
+            test.start();
+            test.join();
+            //        }
         }
-        SEIRAnalysis analysis3 = new SEIRAnalysis("thread3", mohName, startWeek, maxWeeks, maxError, maxInitIter, maxAIter, date, "2014");
-        analysis3.start();
-        analysis3.join();
     }
 
     public static double findSmallestValue(double[] arr) {

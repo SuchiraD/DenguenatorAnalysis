@@ -6,16 +6,18 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import static java.util.Arrays.copyOfRange;
 
-public class ReadDengueCases {
+/**
+ * Created by suchira on 12/26/16.
+ */
+public class ReadPopulations {
     private String file = "";
     private CSVReader csvReader = null;
 
-    public ReadDengueCases(String file) {
+    public ReadPopulations(String file) {
         this.file = file;
         try {
             csvReader = new CSVReader(new FileReader(file));
@@ -25,36 +27,23 @@ public class ReadDengueCases {
         }
     }
 
-    public List<Integer> getDengueCases(String moh) {
+    public int getActualPopulation(String moh) {
         String[] line;
         try {
             while ((line = csvReader.readNext()) != null) {
-                if(line[1].equals(moh)) {
+                if(line[2].equals(moh)) {
 
-                    return convertToIntegers(copyOfRange(line, 2, line.length));
+                    return Integer.parseInt(line[5]);
                 }
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
 
-        return null;
+        return 0;
     }
 
     public void close() throws IOException {
         this.csvReader.close();
-    }
-
-    private List<Integer> convertToIntegers(String[] numbers) {
-        List<Integer> numberList = new ArrayList(1);
-        for (String number : numbers) {
-            try {
-                numberList.add(Integer.parseInt(number));
-            } catch (NumberFormatException e) {
-                e.printStackTrace();
-            }
-        }
-
-        return numberList;
     }
 }

@@ -16,7 +16,7 @@ import java.util.concurrent.locks.Lock;
  * Created by suchira on 11/9/16.
  */
 public class WriteSEIRAnalysisResults {
-    private String[] header = {"day","best.sh","best.eh","best.ih","best.rh","best.a"};
+    private String[] header = {"day","best.sh","best.eh","best.ih","best.rh","best.a", "year", "moh_name", "population"};
 
     private String filePath = "results/";
     private String fileNamePrefix = "SEIRAnalysis";
@@ -25,8 +25,14 @@ public class WriteSEIRAnalysisResults {
     private static String folderPath;
     private static boolean lock = false;
     private static boolean isDirectoryExists = false;
+    private String year;
+    private String mohName;
+    private int population;
 
-    public WriteSEIRAnalysisResults(String folderName, String fileNameSuffix, boolean append) throws IOException {
+    public WriteSEIRAnalysisResults(String folderName, String fileNameSuffix, boolean append, String year, String mohName, int population) throws IOException {
+        this.year = year;
+        this.mohName = mohName;
+        this.population = population;
         this.folderPath = filePath+ folderName + "/";
         File directory = new File(folderPath);
         isDirectoryExists = directory.exists();
@@ -52,7 +58,10 @@ public class WriteSEIRAnalysisResults {
                     Integer.toString(eh[index]),
                     Integer.toString(ih[index]),
                     Integer.toString(rh[index]),
-                    Double.toString(a[index])
+                    Double.toString(a[index]),
+                    year,
+                    mohName,
+                    ""+population+""
             };
             entries.add(row);
         }
