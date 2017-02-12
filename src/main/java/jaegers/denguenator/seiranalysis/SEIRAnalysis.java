@@ -5,10 +5,12 @@ import jaegers.denguenator.csvreader.ReadPopulations;
 import jaegers.denguenator.csvwriter.WriteSEIRAnalysisResults;
 
 import java.io.IOException;
+import java.math.RoundingMode;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
@@ -18,6 +20,7 @@ import java.util.stream.IntStream;
 
 import static jaegers.denguenator.seiranalysis.GeneralUtils.initDoubleArrays;
 import static jaegers.denguenator.seiranalysis.GeneralUtils.initIntArrays;
+import static jaegers.denguenator.seiranalysis.GeneralUtils.correlation;
 import static java.util.concurrent.ThreadLocalRandom.current;
 
 /**
@@ -36,18 +39,20 @@ public class SEIRAnalysis extends Thread {
     private int START_WEEK = 1;
 
     private String mohName;
-    private double gammah = 0.5*7;
-    private double sigmah = 0.12*7;
+    private double gammah = 1.0/2*7;
+    private double sigmah = 1.0/8.33333333333333*7;
 
     private List<Integer> dengueCases = new ArrayList(0);
 
     private int N = 567272; //population for colombo
     private double reportingRate = 0.04;
-    private int ShUpperRange = (int)(0.8*N);
-    private int ShLowerRange = (int)(0.2*N);
-    private int EhUpperRange = 9000;
+    private double ShUpperRate = 0.9;
+    private double ShLowerRate = 0.4;
+    private int ShUpperRange ;
+    private int ShLowerRange ;
+    private int EhUpperRange = 5000;
     private int EhLowerRange = 0;
-    private int IhUpperRange = 9000;
+    private int IhUpperRange = 5000;
     private int IhLowerRange = 0;
 
     private double aUpperValue = 0.8;
@@ -74,12 +79,20 @@ public class SEIRAnalysis extends Thread {
     private String threadName;
     private Date date;
     private String folderName;
+    private String mainFolderName;
 
     private List<Integer> dengueCasesList;
 
     private WriteSEIRAnalysisResults writer;
 
+    private DecimalFormat df = new DecimalFormat("#.#############");
+
+    private final static Object mutex = new Object();
+
+//    public SEIRAnalysis() {}
+
     public SEIRAnalysis(String threadName, String mohName, int startWeek, int maxWeeks, int maxError, int maxInitIter, int maxAIter, Date date, String year) {
+        df.setRoundingMode(RoundingMode.CEILING);
         this.mohName = mohName;
         this.threadName = threadName;
         this.mohName = mohName;
@@ -90,7 +103,8 @@ public class SEIRAnalysis extends Thread {
         this.MAX_ERROR = maxError;
         this.date = date;
         this.year = year;
-        this.folderName = mohName + "-" + date.toString();
+        this.mainFolderName = date.toString();
+        this.folderName = mohName;
         getReportedDengueCases(mohName);
         getPopulation(mohName);
     }
@@ -98,11 +112,13 @@ public class SEIRAnalysis extends Thread {
     private void getPopulation(String mohName) {
         ReadPopulations readPopulation = new ReadPopulations("/media/suchira/0A9E051F0A9E051F/CSE 2012/Semester 07-08/FYP/Denguenator/Dengunator 2.0/Data/"
                 + "Population/Estimated and Actual Populations in MOH's Srilanka2.csv");
+//        ReadPopulations readPopulation = new ReadPopulations("/media/suchira/0A9E051F0A9E051F/CSE 2012/Semester 07-08/FYP/Denguenator/Dengunator 2.0/Data/"
+//                + "Population/populations_districts.csv");
         try {
             this.N = readPopulation.getActualPopulation(mohName);
             readPopulation.close();
-            ShUpperRange = (int)(0.8*N);
-            ShLowerRange = (int)(0.2*N);
+            ShUpperRange = (int)(ShUpperRate*N);
+            ShLowerRange = (int)(ShLowerRate*N);
             /*EhUpperRange = 900;
             EhLowerRange = 0;
             IhUpperRange = 900;
@@ -128,14 +144,44 @@ public class SEIRAnalysis extends Thread {
     private void getReportedDengueCases(String mohName) {
         ReadDengueCases dengueCasesReader = new ReadDengueCases("/media/suchira/0A9E051F0A9E051F/CSE 2012/Semester 07-08/FYP/Denguenator/Dengunator 2.0/Data/Dengue/"
                 + "dengueCases" + year + ".csv");
+//        ReadDengueCases dengueCasesReader = new ReadDengueCases("/media/suchira/0A9E051F0A9E051F/CSE 2012/Semester 07-08/FYP/Denguenator/Dengunator 2.0/Data/Dengue/"
+//                + "dengue" + year + "_districts.csv");
         dengueCasesList = dengueCasesReader.getDengueCases(mohName);
         dengueCasesList.remove(dengueCasesList.size()-1); // Removing the Total of dengue cases
-        adjustDengueCases(dengueCasesList);
         try {
             dengueCasesReader.close();
         } catch (IOException e) {
             e.printStackTrace();
         }
+
+        if(MAX_WEEKS > 51) {
+            dengueCasesReader = new ReadDengueCases("/media/suchira/0A9E051F0A9E051F/CSE 2012/Semester 07-08/FYP/Denguenator/Dengunator 2.0/Data/Dengue/"
+                    + "dengueCases" + (Integer.parseInt(year) + 1) + ".csv");
+//            dengueCasesReader = new ReadDengueCases("/media/suchira/0A9E051F0A9E051F/CSE 2012/Semester 07-08/FYP/Denguenator/Dengunator 2.0/Data/Dengue/"
+//                    + "dengue" + (Integer.parseInt(year) + 1) + "_districts.csv");
+            dengueCasesList.addAll(dengueCasesReader.getDengueCases(mohName));
+            dengueCasesList.remove(dengueCasesList.size()-1); // Removing the Total of dengue cases
+            try {
+                dengueCasesReader.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        if(MAX_WEEKS > 103) {
+            dengueCasesReader = new ReadDengueCases("/media/suchira/0A9E051F0A9E051F/CSE 2012/Semester 07-08/FYP/Denguenator/Dengunator 2.0/Data/Dengue/"
+                    + "dengueCases" + (Integer.parseInt(year) + 2) + ".csv");
+//            dengueCasesReader = new ReadDengueCases("/media/suchira/0A9E051F0A9E051F/CSE 2012/Semester 07-08/FYP/Denguenator/Dengunator 2.0/Data/Dengue/"
+//                    + "dengue" + (Integer.parseInt(year) + 2) + "_districts.csv");
+            dengueCasesList.addAll(dengueCasesReader.getDengueCases(mohName));
+            dengueCasesList.remove(dengueCasesList.size()-1); // Removing the Total of dengue cases
+            try {
+                dengueCasesReader.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        adjustDengueCases(dengueCasesList);
     }
 
     private void adjustDengueCases(List<Integer> dengueCasesList) {
@@ -198,21 +244,24 @@ public class SEIRAnalysis extends Thread {
     @Override public void run() {
         boolean daily = false;
         initializeBestValues(daily);
-        synchronized (this) {
+
 //            leastSquareMethod();
-//            leastSquareMethod2();
-//            backPropagationMethod();
-//            leastSquareMethodWeekly();
-            weeklyMethod();
-            if (bestSh[0] != -1) {
+        //            leastSquareMethod2();
+        //            backPropagationMethod();
+        //            leastSquareMethodWeekly();
+        weeklyMethod();
+        if (bestSh[0] != -1 && bestSh[0] != 0) {
+            synchronized (mutex) {
                 try {
                     writeResults(daily, ("TEST").equals(this.threadName));
                     writeProperties();
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
+
             }
         }
+
     }
 
     public void leastSquareMethod() {
@@ -525,7 +574,7 @@ public class SEIRAnalysis extends Thread {
 
 
     private synchronized void writeResults(boolean daily, boolean isTestFile) throws IOException {
-        writer = new WriteSEIRAnalysisResults(folderName, isTestFile? year+"TEST":year, true, year, mohName, N);
+        writer = new WriteSEIRAnalysisResults(mainFolderName, folderName, isTestFile? year+"TEST":year, true, year, mohName, N);
         if (daily)
             writer.writeCSV(IntStream.rangeClosed((START_WEEK-1)*7, MAX_WEEKS*7).toArray(), bestSh, bestEh, bestIh, bestRh, bestAs);
         else {
@@ -536,15 +585,22 @@ public class SEIRAnalysis extends Thread {
 
     private synchronized void writeProperties() throws IOException {
         if(writer == null) {
-            writer = new WriteSEIRAnalysisResults(folderName, threadName, false, year, mohName, N);
+            writer = new WriteSEIRAnalysisResults(mainFolderName, folderName, threadName, false, year, mohName, N);
             writer.close();
         }
         List<String> lines = Arrays.asList(
-                "bestReportingRate="+reportingRate,
                 "aUpperValue="+aUpperValue,
+                "aLowerValue="+aLowerValue,
+                "ShUpperRange="+ShUpperRange,
+                "ShLowerRange="+ShLowerRange,
+                "EhUpperRange="+EhUpperRange,
+                "EhLowerRange="+EhLowerRange,
+                "IhUpperRange="+IhUpperRange,
+                "IhLowerRange="+IhLowerRange,
+                "reportingRate="+reportingRate,
                 "gammah="+gammah,
                 "sigmah="+sigmah);
-        Path file = Paths.get(writer.getFolderPath() + "/properties.txt");
+        Path file = Paths.get(writer.getMainFolderPath() + "/properties.txt");
         Files.write(file, lines, Charset.forName("UTF-8"));
     }
 
@@ -651,13 +707,13 @@ public class SEIRAnalysis extends Thread {
     }
     @Override public synchronized void start() {
         tCount++;
-        System.out.println("Starting " + threadName + " for MOH area: " + mohName);
-        System.out.println("Population is: " + this.N);
+//        System.out.println("Starting " + threadName + " for MOH area: " + mohName);
+//        System.out.println("Population is: " + this.N);
         if(thread == null) {
             thread = new Thread(this, threadName);
             thread.start();
         }
-        System.out.println(threadName + " started #######################");
+//        System.out.println(threadName + " started #######################");
     }
 
     /*public double[] getActualSqErrors() {
@@ -706,16 +762,85 @@ public class SEIRAnalysis extends Thread {
         int[] rh = new int[maxSize];
         double[] a = new double[maxSize];
 
+        int[] tempSh = new int[maxSize];
+        int[] tempEh = new int[maxSize];
+        int[] tempIh = new int[maxSize];
+        int[] tempRh = new int[maxSize];
+        double[] tempA = new double[maxSize];
+
         setInitialEh(eh, START_WEEK);
         boolean finished = false;
         int count = 0;
+        double maxCorrelation = 0;
+        /*for (int rounds = 1; rounds <= 3; rounds++) {
+            finished = false;
+            while (!finished) {
+                count++;
+                if(count % 1000 == 0) {
+//                    System.out.println("Iteration " + count);
+                    count = 0;
+                    break;
+                }
+                while ((sh[0] + eh[0] + ih[0] + rh[0]) != N || sh[0]<=0 || eh[0]<0 || ih[0]<=0 || rh[0]<=0) {
+                    sh[0] = current().nextInt(ShLowerRange, ShUpperRange + 1);
+                    ih[0] = current().nextInt(IhLowerRange, IhUpperRange + 1);
+                    rh[0] = N - (sh[0] + eh[0] + ih[0]);
+                }
+
+                boolean isErrornous = false;
+                for (int week = START_WEEK; week <= MAX_WEEKS; week++) {
+                    try {
+                        calculateDengueDynamicsWeekly(sh, eh, ih, rh, a, week);
+                    } catch (Exception e) {
+                        isErrornous = true;
+                    }
+                }
+
+                if(isErrornous) {
+                    sh[0] = 0;
+                    ih[0] = 0;
+                    rh[0] = 0;
+                    continue;
+                }
+
+                //            System.out.println("###############################  Number of iterations: " + count);
+                finished = true;
+            }
+
+            if(!finished) {
+                sh[0] = 0;
+                ih[0] = 0;
+                rh[0] = 0;
+                continue;
+            }
+
+            double correlation = correlation(eh, ih);
+
+            if(maxCorrelation < correlation){
+                maxCorrelation = correlation;
+                for(int i = 0; i < sh.length; i++) {
+                    tempSh[i] = sh[i];
+                    tempIh[i] = ih[i];
+                    tempRh[i] = rh[i];
+                    tempA[i] = a[i];
+
+                    sh[0] = 0;
+                    ih[0] = 0;
+                    rh[0] = 0;
+                }
+            }
+
+        }
+*/
+
         while (!finished) {
             count++;
-            if(count % 100000 == 0) {
-                System.out.println("Iteration " + count);
+            if(count % 1000 == 0) {
+                //                    System.out.println("Iteration " + count);
+                count = 0;
                 break;
             }
-            while ((sh[0] + eh[0] + ih[0] + rh[0]) != N || sh[0]<0 || eh[0]<0 || ih[0]<0 || rh[0]<0) {
+            while ((sh[0] + eh[0] + ih[0] + rh[0]) != N || sh[0]<=0 || eh[0]<0 || ih[0]<=0 || rh[0]<=0) {
                 sh[0] = current().nextInt(ShLowerRange, ShUpperRange + 1);
                 ih[0] = current().nextInt(IhLowerRange, IhUpperRange + 1);
                 rh[0] = N - (sh[0] + eh[0] + ih[0]);
@@ -737,14 +862,15 @@ public class SEIRAnalysis extends Thread {
                 continue;
             }
 
-            System.out.println("###############################  Number of iterations: " + count);
+            //            System.out.println("###############################  Number of iterations: " + count);
             finished = true;
         }
 
         if(!finished) {
-            return;
+            sh[0] = -1;
+            ih[0] = -1;
+            rh[0] = -1;
         }
-
 
         for(int i = 0; i < sh.length; i++) {
             bestSh[i] = sh[i];
@@ -754,7 +880,15 @@ public class SEIRAnalysis extends Thread {
             bestAs[i] = a[i];
         }
 
-        System.out.println("Error = " + getSqError(false));
+        /*for(int i = 0; i < sh.length; i++) {
+            bestSh[i] = tempSh[i];
+            bestEh[i] = eh[i];
+            bestIh[i] = tempIh[i];
+            bestRh[i] = tempRh[i];
+            bestAs[i] = tempA[i];
+        }*/
+
+//        System.out.println("Error = " + getSqError(false));
     }
 
     public void calculateDengueDynamicsWeekly(int[] sh, int[] eh, int[] ih, int[] rh, double[] a, int week)
@@ -762,6 +896,8 @@ public class SEIRAnalysis extends Thread {
         int refactoredWeek = week - START_WEEK + 1;
 
         eh[refactoredWeek] = (int) (dengueCases.get(week) / (gammah));
+
+//        a[refactoredWeek-1] = Double.parseDouble(df.format((eh[refactoredWeek] - (1-gammah)*eh[refactoredWeek-1])/sh[refactoredWeek-1]));
         a[refactoredWeek-1] = (eh[refactoredWeek] - (1-gammah)*eh[refactoredWeek-1])/sh[refactoredWeek-1];
         if(a[refactoredWeek-1] < 0 || a[refactoredWeek-1] > 2) {
             throw new Exception("Wrong \"a\"");
@@ -824,6 +960,332 @@ public class SEIRAnalysis extends Thread {
 
     public void setBestRh(int[] bestRh) {
         this.bestRh = bestRh;
+    }
+
+
+    public double getGammah() {
+        return gammah;
+    }
+
+    public void setGammah(double gammah) {
+        this.gammah = gammah;
+    }
+
+    public double getSigmah() {
+        return sigmah;
+    }
+
+    public void setSigmah(double sigmah) {
+        this.sigmah = sigmah;
+    }
+
+    public String getYear() {
+        return year;
+    }
+
+    public void setYear(String year) {
+        this.year = year;
+    }
+
+    public int gettCount() {
+        return tCount;
+    }
+
+    public void settCount(int tCount) {
+        this.tCount = tCount;
+    }
+
+    public int getMAX_ITERATIONS() {
+        return MAX_ITERATIONS;
+    }
+
+    public int getMAX_REPEAT() {
+        return MAX_REPEAT;
+    }
+
+    public int getMAX_A_ITERATIONS() {
+        return MAX_A_ITERATIONS;
+    }
+
+    public void setMAX_A_ITERATIONS(int MAX_A_ITERATIONS) {
+        this.MAX_A_ITERATIONS = MAX_A_ITERATIONS;
+    }
+
+    public int getMAX_INIT_ITERATIONS() {
+        return MAX_INIT_ITERATIONS;
+    }
+
+    public void setMAX_INIT_ITERATIONS(int MAX_INIT_ITERATIONS) {
+        this.MAX_INIT_ITERATIONS = MAX_INIT_ITERATIONS;
+    }
+
+    public int getMAX_ERROR() {
+        return MAX_ERROR;
+    }
+
+    public void setMAX_ERROR(int MAX_ERROR) {
+        this.MAX_ERROR = MAX_ERROR;
+    }
+
+    public double getCurrentError() {
+        return currentError;
+    }
+
+    public void setCurrentError(double currentError) {
+        this.currentError = currentError;
+    }
+
+    public int getMAX_WEEKS() {
+        return MAX_WEEKS;
+    }
+
+    public void setMAX_WEEKS(int MAX_WEEKS) {
+        this.MAX_WEEKS = MAX_WEEKS;
+    }
+
+    public int getSTART_WEEK() {
+        return START_WEEK;
+    }
+
+    public void setSTART_WEEK(int START_WEEK) {
+        this.START_WEEK = START_WEEK;
+    }
+
+    public String getMohName() {
+        return mohName;
+    }
+
+    public void setMohName(String mohName) {
+        this.mohName = mohName;
+    }
+
+    public List<Integer> getDengueCases() {
+        return dengueCases;
+    }
+
+    public void setDengueCases(List<Integer> dengueCases) {
+        this.dengueCases = dengueCases;
+    }
+
+    public int getN() {
+        return N;
+    }
+
+    public void setN(int n) {
+        N = n;
+    }
+
+    public double getReportingRate() {
+        return reportingRate;
+    }
+
+    public void setReportingRate(double reportingRate) {
+        this.reportingRate = reportingRate;
+    }
+
+    public double getShUpperRate() {
+        return ShUpperRate;
+    }
+
+    public void setShUpperRate(double shUpperRate) {
+        ShUpperRate = shUpperRate;
+    }
+
+    public double getShLowerRate() {
+        return ShLowerRate;
+    }
+
+    public void setShLowerRate(double shLowerRate) {
+        ShLowerRate = shLowerRate;
+    }
+
+    public int getShUpperRange() {
+        return ShUpperRange;
+    }
+
+    public void setShUpperRange(int shUpperRange) {
+        ShUpperRange = shUpperRange;
+    }
+
+    public int getShLowerRange() {
+        return ShLowerRange;
+    }
+
+    public void setShLowerRange(int shLowerRange) {
+        ShLowerRange = shLowerRange;
+    }
+
+    public int getEhUpperRange() {
+        return EhUpperRange;
+    }
+
+    public void setEhUpperRange(int ehUpperRange) {
+        EhUpperRange = ehUpperRange;
+    }
+
+    public int getEhLowerRange() {
+        return EhLowerRange;
+    }
+
+    public void setEhLowerRange(int ehLowerRange) {
+        EhLowerRange = ehLowerRange;
+    }
+
+    public int getIhUpperRange() {
+        return IhUpperRange;
+    }
+
+    public void setIhUpperRange(int ihUpperRange) {
+        IhUpperRange = ihUpperRange;
+    }
+
+    public int getIhLowerRange() {
+        return IhLowerRange;
+    }
+
+    public void setIhLowerRange(int ihLowerRange) {
+        IhLowerRange = ihLowerRange;
+    }
+
+    public double getaUpperValue() {
+        return aUpperValue;
+    }
+
+    public void setaUpperValue(double aUpperValue) {
+        this.aUpperValue = aUpperValue;
+    }
+
+    public double getaLowerValue() {
+        return aLowerValue;
+    }
+
+    public void setaLowerValue(double aLowerValue) {
+        this.aLowerValue = aLowerValue;
+    }
+
+    public double[] getTempA() {
+        return tempA;
+    }
+
+    public void setTempA(double[] tempA) {
+        this.tempA = tempA;
+    }
+
+    public int[] getTempSh() {
+        return tempSh;
+    }
+
+    public void setTempSh(int[] tempSh) {
+        this.tempSh = tempSh;
+    }
+
+    public int[] getTempEh() {
+        return tempEh;
+    }
+
+    public void setTempEh(int[] tempEh) {
+        this.tempEh = tempEh;
+    }
+
+    public int[] getTempIh() {
+        return tempIh;
+    }
+
+    public void setTempIh(int[] tempIh) {
+        this.tempIh = tempIh;
+    }
+
+    public int[] getTempRh() {
+        return tempRh;
+    }
+
+    public void setTempRh(int[] tempRh) {
+        this.tempRh = tempRh;
+    }
+
+    public double getTempReportingRate() {
+        return tempReportingRate;
+    }
+
+    public void setTempReportingRate(double tempReportingRate) {
+        this.tempReportingRate = tempReportingRate;
+    }
+
+    public double getBestReportingRate() {
+        return bestReportingRate;
+    }
+
+    public void setBestReportingRate(double bestReportingRate) {
+        this.bestReportingRate = bestReportingRate;
+    }
+
+    public Date getDate() {
+        return date;
+    }
+
+    public void setDate(Date date) {
+        this.date = date;
+    }
+
+    public String getFolderName() {
+        return folderName;
+    }
+
+    public void setFolderName(String folderName) {
+        this.folderName = folderName;
+    }
+
+    public String getMainFolderName() {
+        return mainFolderName;
+    }
+
+    public void setMainFolderName(String mainFolderName) {
+        this.mainFolderName = mainFolderName;
+    }
+
+    public List<Integer> getDengueCasesList() {
+        return dengueCasesList;
+    }
+
+    public void setDengueCasesList(List<Integer> dengueCasesList) {
+        this.dengueCasesList = dengueCasesList;
+    }
+
+    public WriteSEIRAnalysisResults getWriter() {
+        return writer;
+    }
+
+    public void setWriter(WriteSEIRAnalysisResults writer) {
+        this.writer = writer;
+    }
+
+    public DecimalFormat getDf() {
+        return df;
+    }
+
+    public void setDf(DecimalFormat df) {
+        this.df = df;
+    }
+
+    public static Object getMutex() {
+        return mutex;
+    }
+
+
+    public Thread getThread() {
+        return thread;
+    }
+
+    public void setThread(Thread thread) {
+        this.thread = thread;
+    }
+
+    public String getThreadName() {
+        return threadName;
+    }
+
+    public void setThreadName(String threadName) {
+        this.threadName = threadName;
     }
 
     public double getBestTotalSqError() {
